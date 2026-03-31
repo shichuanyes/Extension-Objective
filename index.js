@@ -5,6 +5,7 @@ import {
     eventSource,
     event_types,
     generateQuietPrompt,
+    generateRaw,
     animation_duration,
 } from '../../../../script.js';
 import { waitUntilCondition } from '../../../utils.js';
@@ -29,8 +30,8 @@ let selectedCustomPrompt = 'default';
 
 
 const defaultPrompts = {
-    'createTask': 'Ignore previous instructions. Please generate a numbered list of plain text tasks to complete an objective. The objective that you must make a numbered task list for is: "{{objective}}". The tasks created should take into account the character traits of {{char}}. These tasks may or may not involve {{user}} directly. Include the objective as the final task.\n\nThe list should be formatted using a number followed by a fullstop and the task on each line, e.g. "1. Take over the world". Include only the list in your reply.',
-    'checkTaskCompleted': 'Ignore previous instructions. Determine if this task is completed: [{{task}}]. To do this, examine the most recent messages. Your response must only contain either true or false, and nothing else. Example output: true',
+    'createTask': 'Please generate a numbered list of plain text tasks to complete an objective. The objective that you must make a numbered task list for is: "{{objective}}". The tasks created should take into account the character traits of {{char}}. These tasks may or may not involve {{user}} directly. Include the objective as the final task.\n\nThe list should be formatted using a number followed by a fullstop and the task on each line, e.g. "1. Take over the world". Include only the list in your reply.',
+    'checkTaskCompleted': 'Determine if this task is completed: [{{task}}]. To do this, examine the most recent messages. Your response must only contain either true or false, and nothing else. Example output: true',
     'currentTask': 'Your current task is [{{task}}]. Balance existing roleplay with completing this task.',
 };
 
@@ -71,13 +72,29 @@ function substituteParamsPrompts(content, substituteGlobal) {
     return content;
 }
 
+// Build a minimal system prompt with only character info — no preset RP rules
+function buildObjectiveSystemPrompt() {
+    const context = getContext();
+    const char = context.characters[context.characterId];
+    if (!char) return '';
+
+    const parts = [];
+    if (char.name) parts.push(`Character: ${char.name}`);
+    if (char.description?.trim()) parts.push(`Description: ${char.description.trim()}`);
+    if (char.personality?.trim()) parts.push(`Personality: ${char.personality.trim()}`);
+    if (char.scenario?.trim()) parts.push(`Scenario: ${char.scenario.trim()}`);
+
+    return parts.join('\n');
+}
+
 // Call Quiet Generate to create task list using character context, then convert to tasks. Should not be called much.
 async function generateTasks() {
 
     const prompt = substituteParamsPrompts(objectivePrompts.createTask, false);
     console.log('Generating tasks for objective with prompt');
     toastr.info('Generating tasks for objective', 'Please wait...');
-    const taskResponse = await generateQuietPrompt(prompt, false, false);
+    const systemPrompt = buildObjectiveSystemPrompt();
+    const taskResponse = await generateRaw(prompt, undefined, false, false, systemPrompt);
 
     // Clear all existing objective tasks when generating
     currentObjective.children = [];
@@ -123,7 +140,8 @@ async function checkTaskCompleted() {
     const toast = toastr.info('Checking for task completion.');
 
     const prompt = substituteParamsPrompts(objectivePrompts.checkTaskCompleted, false);
-    const taskResponse = (await generateQuietPrompt(prompt, false, false)).toLowerCase();
+    const systemPrompt = buildObjectiveSystemPrompt();
+    const taskResponse = (await generateRaw(prompt, undefined, false, false, systemPrompt)).toLowerCase();
     toastr.clear(toast);
 
     // Check response if task complete
