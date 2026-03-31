@@ -87,6 +87,17 @@ function buildObjectiveSystemPrompt() {
     return parts.join('\n');
 }
 
+// Return recent chat messages formatted as plain text
+function getRecentChatHistory(messageCount = 20) {
+    const context = getContext();
+    if (!context.chat?.length) return '';
+
+    return context.chat.slice(-messageCount).map(msg => {
+        const name = msg.is_user ? context.name1 : context.name2;
+        return `${name}: ${msg.mes}`;
+    }).join('\n');
+}
+
 // Call Quiet Generate to create task list using character context, then convert to tasks. Should not be called much.
 async function generateTasks() {
 
@@ -94,7 +105,9 @@ async function generateTasks() {
     console.log('Generating tasks for objective with prompt');
     toastr.info('Generating tasks for objective', 'Please wait...');
     const systemPrompt = buildObjectiveSystemPrompt();
-    const taskResponse = await generateRaw(prompt, undefined, false, false, systemPrompt);
+    const chatHistory = getRecentChatHistory();
+    const fullPrompt = chatHistory ? `[Chat history:\n${chatHistory}\n]\n\n${prompt}` : prompt;
+    const taskResponse = await generateRaw(fullPrompt, undefined, false, false, systemPrompt);
 
     // Clear all existing objective tasks when generating
     currentObjective.children = [];
@@ -141,7 +154,9 @@ async function checkTaskCompleted() {
 
     const prompt = substituteParamsPrompts(objectivePrompts.checkTaskCompleted, false);
     const systemPrompt = buildObjectiveSystemPrompt();
-    const taskResponse = (await generateRaw(prompt, undefined, false, false, systemPrompt)).toLowerCase();
+    const chatHistory = getRecentChatHistory();
+    const fullPrompt = chatHistory ? `[Chat history:\n${chatHistory}\n]\n\n${prompt}` : prompt;
+    const taskResponse = (await generateRaw(fullPrompt, undefined, false, false, systemPrompt)).toLowerCase();
     toastr.clear(toast);
 
     // Check response if task complete
